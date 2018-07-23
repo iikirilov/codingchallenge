@@ -13,15 +13,17 @@ public final class PriceHolder {
     /** Called when a price ‘p’ is received for an entity ‘e’ */
     public void putPrice(final String e, final BigDecimal p) {
         prices.compute(e, (key, value) -> {
-            hasPriceChanged.merge(e, true, (old, newB) -> newB);
+            hasPriceChanged.put(e, true);
             return p;
         });
     }
 
     /** Called to get the latest price for entity ‘e’ */
-    public synchronized BigDecimal getPrice(String e) {
-        hasPriceChanged.merge(e, false, (old, newB) -> newB);
-        return prices.get(e);
+    public BigDecimal getPrice(String e) {
+        return prices.compute(e, (k, v) -> {
+            hasPriceChanged.put(e, false);
+           return v;
+        });
     }
 
     /**

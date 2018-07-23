@@ -1,7 +1,6 @@
 package Question3;
 
 import java.math.BigDecimal;
-import java.util.*;
 import java.util.concurrent.*;
 
 public final class PriceHolder {
@@ -10,30 +9,27 @@ public final class PriceHolder {
 
     private final ConcurrentHashMap<String, BigDecimal> prices = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Boolean> hasPriceChanged = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Queue<CountDownLatch>> entityThreadCountDownLatches = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CountDownLatchManager> entityThreadCountDownLatches = new ConcurrentHashMap<>();
 
     public PriceHolder() { }
 
     /** Called when a price ‘p’ is received for an entity ‘e’ */
     public void putPrice(final String e, final BigDecimal p) {
         prices.compute(e, (key, value) -> {
-            hasPriceChanged.merge(e, true, (old, newB) -> newB);
-            unblockWaitingThreadForEntity(e);
+            hasPriceChanged.put(e, true);
+            entityThreadCountDownLatches
+                    .getOrDefault(e, new CountDownLatchManager())
+                    .unblockFirstWaitingThread();
             return p;
         });
     }
 
-    private void unblockWaitingThreadForEntity(String e) {
-        Queue<CountDownLatch> entityCountDownLatches = entityThreadCountDownLatches.getOrDefault(e, null);
-        if (entityCountDownLatches != null && entityCountDownLatches.size() > 0) {
-            entityCountDownLatches.remove().countDown();
-        }
-    }
-
     /** Called to get the latest price for entity ‘e’ */
-    public synchronized BigDecimal getPrice(final String e) {
-        hasPriceChanged.merge(e, false, (old, newB) -> newB);
-        return prices.get(e);
+    public BigDecimal getPrice(final String e) {
+        return prices.compute(e, (k, v) -> {
+            hasPriceChanged.put(e, false);
+            return v;
+        });
     }
 
     /**
@@ -59,13 +55,9 @@ public final class PriceHolder {
     }
 
     private void waitForPutPriceToBeCalledForEntity(String e) throws InterruptedException {
-        CountDownLatch oneStepLatch = new CountDownLatch(1);
-        LinkedList<CountDownLatch> oneStepLatchAsList = new LinkedList<>();
-        oneStepLatchAsList.add(oneStepLatch);
-        entityThreadCountDownLatches.merge(e, oneStepLatchAsList , (oldLatchs, newLatchs) -> {
-            oldLatchs.addAll(newLatchs);
-            return oldLatchs;
-        });
-        oneStepLatch.await();
+        entityThreadCountDownLatches.merge(e, new CountDownLatchManager() , (oldLatches, newLatches) -> {
+            oldLatches.addNewLatch();
+            return oldLatches;
+        }).awaitOnLastLatch();
     }
 }

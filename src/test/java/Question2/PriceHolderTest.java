@@ -28,6 +28,7 @@ public class PriceHolderTest {
         assertEquals(ph.hasPriceChanged("a"), true);
         assertEquals(ph.getPrice("a"), ten);
         assertEquals(ph.hasPriceChanged("a"), false);
+        assertEquals(ph.hasPriceChanged("b"), false);
 
         ph.putPrice("a", twelve);
         ph.putPrice("b", two);
